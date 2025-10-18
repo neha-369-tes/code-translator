@@ -55,48 +55,115 @@ app.get('/api/health', (req, res) => {
 
 // Try to set up static file serving
 try {
-  // In Vercel, static files are served directly through vercel.json routes
-  // This is just a fallback
-  const staticPath = path.join(process.cwd(), 'public');
-  if (fs.existsSync(staticPath)) {
-    console.log(`Serving static files from: ${staticPath}`);
-    app.use(express.static(staticPath));
-  } else {
-    console.log(`Static path not found: ${staticPath}`);
+  // Log current working directory and its contents
+  console.log('Current working directory:', process.cwd());
+  try {
+    const cwdFiles = fs.readdirSync(process.cwd());
+    console.log('Files in CWD:', cwdFiles.join(', '));
+  } catch (e) {
+    console.log('Could not list CWD files:', e.message);
   }
+  
+  // Try multiple possible static file locations
+  const possiblePaths = [
+    path.join(process.cwd(), 'dist', 'public'),
+    path.join(process.cwd(), 'public'),
+    path.join(process.cwd(), '.vercel', 'output', 'static'),
+    path.join(process.cwd(), '..', 'public'),
+  ];
+  
+  let staticPath = null;
+  for (const tryPath of possiblePaths) {
+    if (fs.existsSync(tryPath)) {
+      staticPath = tryPath;
+      console.log(`Found static files at: ${staticPath}`);
+      try {
+        const files = fs.readdirSync(staticPath);
+        console.log(`Files in static directory: ${files.slice(0, 10).join(', ')}${files.length > 10 ? '...' : ''}`);
+      } catch (e) {
+        console.log('Could not list static files:', e.message);
+      }
+      break;
+    }
+  }
+  
+  if (!staticPath) {
+    console.log('No static files directory found in any of:', possiblePaths.join(', '));
+    staticPath = path.join(process.cwd(), 'dist', 'public'); // default fallback
+  }
+  
+  // Serve static files with proper configuration
+  app.use(express.static(staticPath, {
+    maxAge: '1d',
+    index: false, // Don't auto-serve index.html, we'll handle it explicitly
+  }));
 
-  // Handle client-side routing
+  // Handle client-side routing - this should be the last route
   app.get('*', (req, res) => {
     // Avoid handling API requests
     if (req.path.startsWith('/api/')) {
       return res.status(404).json({ error: 'API endpoint not found' });
     }
     
-    // Try to serve index.html
-    const indexPath = path.join(process.cwd(), 'public', 'index.html');
-    if (fs.existsSync(indexPath)) {
-      res.sendFile(indexPath);
-    } else {
-      res.status(200).send(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>App</title>
-            <meta charset="UTF-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <script>
-              // Redirect to the main domain if needed
-              if (window.location.pathname !== '/' && !window.location.pathname.includes('.')) {
-                window.location.href = '/';
-              }
-            </script>
-          </head>
-          <body>
-            <div id="root">Application is loading...</div>
-          </body>
-        </html>
-      `);
+    console.log(`Handling catch-all route for: ${req.path}`);
+    
+    // Try to serve index.html from multiple locations
+    const indexPaths = [
+      path.join(staticPath, 'index.html'),
+      path.join(process.cwd(), 'dist', 'public', 'index.html'),
+      path.join(process.cwd(), 'public', 'index.html'),
+    ];
+    
+    for (const indexPath of indexPaths) {
+      if (fs.existsSync(indexPath)) {
+        console.log(`Serving index.html from: ${indexPath}`);
+        return res.sendFile(indexPath);
+      } else {
+        console.log(`index.html not found at: ${indexPath}`);
+      }
     }
+    
+    // If no index.html found, return an error page with debug info
+    console.error('No index.html found in any location');
+    res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Build Error</title>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <style>
+            body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #fff; }
+            .error { background: #330000; border: 1px solid #660000; padding: 15px; margin: 10px 0; }
+            .info { background: #003300; border: 1px solid #006600; padding: 15px; margin: 10px 0; }
+          </style>
+        </head>
+        <body>
+          <h1>⚠️ Build Error</h1>
+          <div class="error">
+            <h2>index.html not found</h2>
+            <p>The application was not built correctly or the build output is in an unexpected location.</p>
+          </div>
+          <div class="info">
+            <h2>Debug Information</h2>
+            <p><strong>CWD:</strong> ${process.cwd()}</p>
+            <p><strong>Static Path:</strong> ${staticPath}</p>
+            <p><strong>Tried paths:</strong></p>
+            <ul>
+              ${indexPaths.map(p => `<li>${p} - ${fs.existsSync(p) ? '✓ exists' : '✗ not found'}</li>`).join('')}
+            </ul>
+          </div>
+          <div class="info">
+            <h2>Next Steps</h2>
+            <ol>
+              <li>Check Vercel build logs for errors during the build process</li>
+              <li>Verify that <code>npm run build</code> completes successfully</li>
+              <li>Check that vite.config.ts outputs to the correct directory</li>
+            </ol>
+          </div>
+        </body>
+      </html>
+    `);
   });
 } catch (err) {
   console.error('Error setting up static serving:', err);

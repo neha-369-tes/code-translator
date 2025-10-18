@@ -1,29 +1,27 @@
 {
-  "name": "translator",
   "version": 2,
-  "builds": [
-    {
-      "src": "api/index.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "buildCommand": "npm run build",
-        "outputDirectory": "dist/public"
-      }
-    }
-  ],
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/public",
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/index.js" },
-    { "src": "/(.*\\.(js|css|ico|png|jpg|jpeg|svg|webp|json|woff|woff2|ttf|eot))", "dest": "/$1" },
-    { "src": "/(.*)", "dest": "/api/index.js" }
+    { 
+      "src": "/api/(.*)", 
+      "dest": "/api/index.js" 
+    },
+    { 
+      "src": "/assets/(.*)", 
+      "dest": "/assets/$1" 
+    },
+    { 
+      "src": "/(.*\\.(js|css|ico|png|jpg|jpeg|svg|webp|json|woff|woff2|ttf|eot))", 
+      "dest": "/$1" 
+    },
+    { 
+      "src": "/(.*)", 
+      "dest": "/index.html" 
+    }
   ],
   "env": {
     "GEMINI_API_KEY": "AIzaSyB2ijqZuPfKhbQQ2boJr7NZ8ssrE4_takI",
-    "PORT": "3000",
-    "NODE_ENV": "production",
-    "VERCEL": "1"
+    "NODE_ENV": "production"
   }
 }
