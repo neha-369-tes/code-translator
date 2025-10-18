@@ -1,9 +1,19 @@
 import "dotenv/config";
+// Ensure NODE_ENV defaults to production when not explicitly set. Some hosting
+// environments (or running the bundled server) may not set NODE_ENV, and the
+// app relies on it to decide whether to run Vite dev middleware or serve
+// compiled static files. Defaulting here avoids accidentally starting the dev
+// middleware in production.
+process.env.NODE_ENV = process.env.NODE_ENV || "production";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+// Ensure Express' internal env matches the Node environment we set above.
+// This avoids cases where `app.get('env')` still returns 'development' and
+// accidentally activates the Vite dev middleware in production builds.
+app.set("env", process.env.NODE_ENV || app.get("env"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
