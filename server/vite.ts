@@ -70,18 +70,114 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
+  try {
+    // In Vercel serverless, the dist/public directory is mapped through routes in vercel.json
+    // For local execution, we need to find the actual static files directory
+    let distPath;
+    
+    // Check if we're running on Vercel
+    if (process.env.VERCEL === '1') {
+      // On Vercel, use a fixed path according to Vercel's deployment structure
+      distPath = path.join(process.cwd(), 'public');
+      console.log(`Running on Vercel, setting static path to: ${distPath}`);
+    } else {
+      // For local environments, try multiple possible locations
+      const possiblePaths = [
+        path.join(process.cwd(), 'dist', 'public'),
+        path.join(process.cwd(), 'public'),
+        path.join(import.meta.dirname || process.cwd(), 'public'),
+        path.join(import.meta.dirname || process.cwd(), '..', 'public')
+      ];
+      
+      console.log(`Checking possible static file paths: ${possiblePaths.join(', ')}`);
+      distPath = possiblePaths.find(p => fs.existsSync(p));
+      
+      if (!distPath) {
+        console.error(`None of the possible static file paths exist`);
+        // Continue anyway - we might be in a serverless environment where the
+        // vercel.json routes configuration handles static files differently
+        distPath = path.join(process.cwd(), 'public');
+        console.warn(`Defaulting to: ${distPath} (may not exist)`);
+      } else {
+        console.log(`Found static files at: ${distPath}`);
+      }
+    }
+    
+    // Log directories to help with debugging
+    console.log(`Current directory: ${process.cwd()}`);
+    try {
+      console.log(`Files in current directory: ${fs.readdirSync(process.cwd()).join(', ')}`);
+      
+      if (fs.existsSync(path.join(process.cwd(), 'dist'))) {
+        console.log(`Files in dist directory: ${fs.readdirSync(path.join(process.cwd(), 'dist')).join(', ')}`);
+      }
+      
+      if (fs.existsSync(distPath)) {
+        console.log(`Files in static directory: ${fs.readdirSync(distPath).join(', ')}`);
+      }
+    } catch (err) {
+      console.error(`Error listing directories: ${err}`);
+    }
 
-  if (!fs.existsSync(distPath)) {
-    throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
-    );
+    // Setup static file middleware
+    app.use(express.static(distPath, { 
+      maxAge: '1d',
+      fallthrough: true
+    }));
+
+    // Fall through to index.html for client-side routing
+    app.use("*", (_req, res) => {
+      try {
+        const indexPath = path.join(distPath, "index.html");
+        
+        if (fs.existsSync(indexPath)) {
+          console.log(`Serving index.html from ${indexPath}`);
+          res.sendFile(indexPath);
+        } else {
+          console.error(`index.html not found at ${indexPath}`);
+          
+          // Special case for Vercel - if index.html doesn't exist locally,
+          // let the request fall through to Vercel's routing
+          if (process.env.VERCEL === '1') {
+            console.log('Running on Vercel, sending simple HTML response');
+            res.send(`
+              <!DOCTYPE html>
+              <html>
+                <head>
+                  <title>App</title>
+                  <meta charset="UTF-8" />
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                </head>
+                <body>
+                  <div id="root">Loading...</div>
+                  <script>
+                    window.location.reload();
+                  </script>
+                </body>
+              </html>
+            `);
+          } else {
+            res.status(404).send(`
+              Index file not found at ${indexPath}.<br>
+              Current directory: ${process.cwd()}<br>
+              Static directory: ${distPath}<br>
+              Environment: ${process.env.NODE_ENV}
+            `);
+          }
+        }
+      } catch (err) {
+        console.error(`Error serving index.html: ${err}`);
+        res.status(500).send(`Error serving index.html: ${err}`);
+      }
+    });
+  } catch (err) {
+    console.error(`Error setting up static file serving: ${err}`);
+    // Don't throw - let the server continue without static file serving
+    // This allows the API routes to work even if static file serving is broken
+    app.use("*", (_req, res) => {
+      if (!res.headersSent) {
+        res.status(500).send(`Static file serving error: ${err}`);
+      }
+    });
   }
-
-  app.use(express.static(distPath));
-
-  // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
-  });
 }
