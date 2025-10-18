@@ -12,7 +12,7 @@
     { "src": "/(.*)", "dest": "/server/index.ts" }
   ],
   "env": {
-    "GEMINI_API_KEY": "@gemini_api_key",
+    "GEMINI_API_KEY": "AIzaSyB2ijqZuPfKhbQQ2boJr7NZ8ssrE4_takI",
     "PORT": "3000",
     "NODE_ENV": "production"
   }
