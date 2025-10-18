@@ -2,18 +2,24 @@
   "version": 2,
   "builds": [
     {
-      "src": "server/index.ts",
-      "use": "@vercel/node"
+      "src": "package.json",
+      "use": "@vercel/node",
+      "config": {
+        "buildCommand": "npm run build",
+        "outputDirectory": "dist"
+      }
     }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "/server/index.ts" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/server/index.ts" }
+    { "src": "/api/(.*)", "dest": "/dist/index.js" },
+    { "src": "/(.*\\.(js|css|ico|png|jpg|jpeg|svg|webp|json))", "dest": "/dist/public/$1" },
+    { "src": "/(.*)", "dest": "/dist/public/index.html" }
   ],
   "env": {
     "GEMINI_API_KEY": "AIzaSyB2ijqZuPfKhbQQ2boJr7NZ8ssrE4_takI",
     "PORT": "3000",
     "NODE_ENV": "production"
   }
+}
+}
 }
